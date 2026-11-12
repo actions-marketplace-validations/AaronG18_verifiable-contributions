@@ -54,6 +54,32 @@ append patterns to `assertion_markers`; unknown failures fail closed to
 secure, well designed, or worth maintaining. It says a specific behaviour is
 covered by a test that fails without the change. A human still reviews.
 
+### Example job summary
+
+For a PR whose new test genuinely covers the change, the job summary the
+action appends reads (abridged):
+
+```markdown
+## Verification receipt: Verified
+
+| | Base | Head |
+| --- | --- | --- |
+| Commit | `a1b2c3d4e5f6` | `9f8e7d6c5b4a` |
+| Exit code | `1` | `0` |
+| Failure kind | `assertion` | `none` |
+
+The base failure was classified as an assertion failure, so the tests fail
+without the change and pass with it in this CI environment. This does not
+prove the change is correct, only that the claimed behaviour is exercised by a
+test. A human still reviews.
+
+Base failure evidence: `assert 9 == 8`
+```
+
+A doc-only PR (no behavioural test) instead yields `NEEDS_EVIDENCE`, because
+the suite also passes on the base tree — exactly the "tests don't prove the
+change" case the tool is built to surface.
+
 ## Install and use
 
 ```shell
@@ -99,7 +125,7 @@ touch a protected path, the verdict is `UNTRUSTED`.
   with:
     persist-credentials: false
     fetch-depth: 0
-- uses: AaronG18/verifiable-contributions@v0.3.0
+- uses: AaronG18/verifiable-contributions@v0.3.1
   with:
     base: ${{ github.event.pull_request.base.sha }}
     head: ${{ github.event.pull_request.head.sha }}

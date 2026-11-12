@@ -35,6 +35,15 @@ DEFAULT_ENVIRONMENT_MARKERS: tuple[str, ...] = (
     "cannot find module",
     "err_module_not_found",
     "could not start command",
+    # A base run that fails to connect/start/load before any test executes is an
+    # environment error, not evidence that a test detected the change. These are
+    # checked before the assertion markers (which include the broad "failed "
+    # substring), so a line like "Failed to connect to the database" is
+    # classified as `environment` -> NEEDS_RERUN instead of a false VERIFIED.
+    "failed to connect",
+    "failed to start",
+    "failed to load",
+    "failed to resolve",
 )
 
 # Signals that a test executed and its assertion failed.

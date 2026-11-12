@@ -52,6 +52,32 @@ def test_timeout_is_environment_error() -> None:
     assert kind == KIND_ENVIRONMENT
 
 
+def test_failed_to_connect_is_environment_not_assertion() -> None:
+    # "failed " is a broad assertion substring; a startup/connection failure
+    # that prints "Failed to connect to the database" must not read as evidence.
+    kind, _ = classify_failure(
+        1, "", "Failed to connect to database: connection refused", timed_out=False
+    )
+    assert kind == KIND_ENVIRONMENT
+
+
+def test_failed_to_start_is_environment_not_assertion() -> None:
+    kind, _ = classify_failure(1, "", "Failed to start server before tests", timed_out=False)
+    assert kind == KIND_ENVIRONMENT
+
+
+def test_failed_to_load_is_environment_not_assertion() -> None:
+    kind, _ = classify_failure(1, "", "Failed to load configuration file", timed_out=False)
+    assert kind == KIND_ENVIRONMENT
+
+
+def test_real_pytest_assertion_still_recognised() -> None:
+    # The fix must not regress genuine pytest assertion detection.
+    out = "FAILED tests/test_sample.py::test_double - assert 9 == 8\n1 failed in 0.1s"
+    kind, evidence = classify_failure(1, out, "E   AssertionError", timed_out=False)
+    assert kind == KIND_ASSERTION
+
+
 def test_custom_markers_are_appended() -> None:
     kind, _ = classify_failure(
         1,

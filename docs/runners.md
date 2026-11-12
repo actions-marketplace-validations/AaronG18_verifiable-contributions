@@ -67,7 +67,7 @@ timeout_seconds = 300
   with:
     persist-credentials: false
     fetch-depth: 0
-- uses: AaronG18/verifiable-contributions@v0.3.0
+- uses: AaronG18/verifiable-contributions@v0.3.1
   with:
     base: ${{ github.event.pull_request.base.sha }}
     head: ${{ github.event.pull_request.head.sha }}

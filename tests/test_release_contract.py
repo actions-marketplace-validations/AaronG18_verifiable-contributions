@@ -104,6 +104,11 @@ DANGEROUS_ENV_KEYS = (
     "PYPI_API_TOKEN",
     "DATABASE_PASSWORD",
     "PRIVATE_KEY_PEM",
+    # Bare "KEY" strip (v0.3.1): these carry no longer prefix yet are secrets.
+    "DEPLOY_KEY",
+    "APIKEY",
+    "SSH_KEY",
+    "ENCRYPTION_KEY",
 )
 
 

@@ -51,6 +51,10 @@ SAFE_ENV_DENY: tuple[str, ...] = (
     "COOKIE",
     "SIGNING_KEY",
     "KUBECONFIG",
+    # Bare "KEY" catches DEPLOY_KEY, SSH_KEY, APIKEY, ENCRYPTION_KEY, MASTER_KEY,
+    # which lack a longer recognisable prefix. Do not also shorten this to a
+    # fragment that would strip benign vars (the "PAT" lesson applies).
+    "KEY",
 )
 
 # Exact names that do not contain any of the substrings above. Do NOT add
