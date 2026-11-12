@@ -12,13 +12,35 @@ _VERDICT_LABEL = {
 }
 
 
+def _sanitize(value: str) -> str:
+    """Render PR-author-controlled text inert inside the job summary.
+
+    Test output is untrusted: it can contain closing code fences, Markdown
+    headings or raw HTML. Escape them so a crafted failure cannot forge a
+    "Verified" section or inject markup into $GITHUB_STEP_SUMMARY.
+    """
+    escaped = (
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("`", "&#96;")
+    )
+    # Defence in depth: even if a future renderer changes how fences work, a
+    # line from test output must never become a Markdown heading or quote.
+    lines = []
+    for line in escaped.split("\n"):
+        stripped = line.lstrip()
+        if stripped.startswith(("#", ">", "|")):
+            marker = stripped[0]
+            line = line[: len(line) - len(stripped)] + f"&#{ord(marker)};" + stripped[1:]
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def render_markdown(receipt: Receipt) -> str:
     r = receipt
     label = _VERDICT_LABEL.get(r.verdict, r.verdict)
     lines = [
         f"## Verification receipt: {label}",
         "",
-        r.reason,
+        _sanitize(r.reason),
         "",
         "| | Base | Head |",
         "| --- | --- | --- |",
@@ -47,12 +69,12 @@ def render_markdown(receipt: Receipt) -> str:
             "does not prove the change is correct, only that the claimed behaviour "
             "is exercised by a test. A human still reviews.",
             "",
-            f"Base failure evidence: `{r.base_run.failure_evidence[:300]}`",
+            f"Base failure evidence: `{_sanitize(r.base_run.failure_evidence[:300])}`",
         ]
     elif r.base_run.failure_kind == "environment":
         lines += [
             "",
-            f"Base failure evidence: `{r.base_run.failure_evidence[:300]}`",
+            f"Base failure evidence: `{_sanitize(r.base_run.failure_evidence[:300])}`",
         ]
     if r.base_run.stderr_excerpt and r.verdict != VERDICT_VERIFIED:
         lines += [
@@ -60,7 +82,7 @@ def render_markdown(receipt: Receipt) -> str:
             "<details><summary>Base run stderr (last lines)</summary>",
             "",
             "```",
-            r.base_run.stderr_excerpt[-800:],
+            _sanitize(r.base_run.stderr_excerpt[-800:]),
             "```",
             "",
             "</details>",
@@ -71,7 +93,7 @@ def render_markdown(receipt: Receipt) -> str:
             "<details><summary>Head run stderr (last lines)</summary>",
             "",
             "```",
-            r.head_run.stderr_excerpt[-800:],
+            _sanitize(r.head_run.stderr_excerpt[-800:]),
             "```",
             "",
             "</details>",

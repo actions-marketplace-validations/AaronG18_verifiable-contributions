@@ -5,4 +5,4 @@
 command = ["python", "-m", "pytest", "-q"]
 test_paths = ["tests/"]
 timeout_seconds = 300
-protected_paths = ["vrc/", "action.yml", ".vrc.toml", ".github/workflows/receipt.yml", ".github/dependabot.yml", "SECURITY.md", "pyproject.toml"]
+protected_paths = ["vrc/", "action.yml", ".vrc.toml", ".github/workflows/", ".github/dependabot.yml", "SECURITY.md", "pyproject.toml"]

@@ -87,6 +87,12 @@ runs:
         verdict="$(python -c 'import json; print(json.load(open("receipt.json"))["verdict"])')"
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         echo "receipt=receipt.json" >> "$GITHUB_OUTPUT"
+        # Self-validate before publishing: a receipt that fails its own
+        # integrity check must never reach the job summary or the artifact.
+        if ! vrc check receipt.json; then
+          echo "::error::receipt failed its own integrity check"
+          exit 1
+        fi
         vrc explain receipt.json >> "$GITHUB_STEP_SUMMARY" || true
         exit "$status"
 

@@ -32,7 +32,31 @@ from .receipt import (
     sha256_text,
 )
 
-SAFE_ENV_DENY = ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "API_KEY", "PRIVATE_KEY")
+# Substring match against the variable NAME. Anything that looks like it could
+# carry a credential must not reach the untrusted test process. Keep this list
+# in sync with the contract test in tests/test_release_contract.py.
+SAFE_ENV_DENY: tuple[str, ...] = (
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "CREDENTIAL",
+    "API_KEY",
+    "ACCESS_KEY",
+    "PRIVATE_KEY",
+    "PRIVATE",
+    "AUTH_CONFIG",
+    "WEBHOOK",
+    "PEM",
+    "SESSION_KEY",
+    "COOKIE",
+    "SIGNING_KEY",
+    "KUBECONFIG",
+)
+
+# Exact names that do not contain any of the substrings above. Do NOT add
+# short substrings like "PAT" to SAFE_ENV_DENY: it would also strip PATH,
+# COMPAT and PATTERN and break every test command.
+SAFE_ENV_DENY_EXACT: frozenset[str] = frozenset({"GH_PAT", "GITHUB_PAT", "NPM_CONFIG_USERCONFIG"})
 
 
 class ReplayError(RuntimeError):
@@ -104,7 +128,20 @@ def _safe_relative(path: str) -> Path:
     return candidate
 
 
+def _is_glob(path: Path) -> bool:
+    return any(char in path.as_posix() for char in "*?[")
+
+
 def _iter_files(root: Path, relative: Path) -> list[Path]:
+    if _is_glob(relative):
+        # `Path.glob` treats "**" as "this directory and below", so a pattern
+        # like "**/*_test.go" selects test files anywhere without ever pulling
+        # in the source files sitting next to them.
+        return sorted(
+            p.relative_to(root)
+            for p in root.glob(relative.as_posix())
+            if p.is_file() and not p.is_symlink()
+        )
     target = root / relative
     if target.is_file():
         return [relative]
@@ -120,12 +157,18 @@ def _overlay_test_paths(base: Path, head: Path, test_paths: tuple[str, ...]) -> 
     digests: dict[str, str] = {}
     for raw in test_paths:
         relative = _safe_relative(raw)
-        base_target = base / relative
-        if base_target.is_dir():
-            shutil.rmtree(base_target)
-        elif base_target.is_file() or base_target.is_symlink():
-            base_target.unlink()
-        for rel in _iter_files(head, relative):
+        head_files = _iter_files(head, relative)
+        if _is_glob(relative):
+            # Remove only the files this pattern matches, never a whole tree.
+            for rel in _iter_files(base, relative):
+                (base / rel).unlink()
+        else:
+            base_target = base / relative
+            if base_target.is_dir():
+                shutil.rmtree(base_target)
+            elif base_target.is_file() or base_target.is_symlink():
+                base_target.unlink()
+        for rel in head_files:
             source = head / rel
             dest = base / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -148,7 +191,8 @@ def _env_for_run() -> dict[str, str]:
     env = {
         key: value
         for key, value in os.environ.items()
-        if not any(deny in key.upper() for deny in SAFE_ENV_DENY)
+        if key.upper() not in SAFE_ENV_DENY_EXACT
+        and not any(deny in key.upper() for deny in SAFE_ENV_DENY)
     }
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["VRC_VERIFICATION_RUN"] = "1"

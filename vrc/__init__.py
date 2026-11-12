@@ -1,6 +1,6 @@
 """Independent replay of the tests attached to a change proposal."""
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 from .receipt import Receipt, derive_verdict
 from .replay import ReplayOutcome, replay

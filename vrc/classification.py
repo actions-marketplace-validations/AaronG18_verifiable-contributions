@@ -71,63 +71,18 @@ def is_valid_kind(value: str) -> bool:
 # preset cannot switch off the environment-error detection. Unknown runners are
 # ignored and fall back to the defaults plus any `assertion_markers` /
 # `environment_markers` the policy appends directly.
+# Only signatures that appear when a test has actually FAILED belong here.
+# Success tokens (check marks, "passing", "N passed"), crash tokens ("panic:",
+# "error:") and vague words ("expected", "to be", "failed") must NOT be used:
+# a base run can exit non-zero for an unrelated reason while still printing a
+# green summary, and reading that as an assertion yields a false VERIFIED.
+# tests/test_no_false_positive.py enforces this structurally.
 RUNNER_ASSERTION_MARKERS: dict[str, tuple[str, ...]] = {
-    "jest": (
-        "✕",
-        "✗",
-        "×",
-        "●",
-        "tests: ",
-        "test suites:",
-        "expect(",
-        "expected",
-        "received",
-        "assertionerror",
-        "to equal",
-        "to be",
-        "to match",
-    ),
-    "vitest": (
-        "✓",
-        "✗",
-        "×",
-        "❯",
-        "tests ",
-        "test suites ",
-        "expect(",
-        "expected",
-        "received",
-        "assertionerror",
-        "to equal",
-        "to be",
-    ),
-    "go-test": (
-        "--- fail:",
-        "fail:",
-        "--- fail",
-        "panic:",
-        "error trace:",
-        "error:",
-        "expected:",
-        "got:",
-    ),
-    "mocha": (
-        "passing",
-        "failing",
-        "✓",
-        "✗",
-        "assertionerror",
-        "expected",
-        "actual",
-    ),
-    "npm": (
-        "failing",
-        "failed",
-        "✗",
-        "assertionerror",
-        "expected",
-        "not equal",
-    ),
+    "jest": ("✕", "✗", "×", "expect(", "assertionerror"),
+    "vitest": ("✗", "×", "expect(", "assertionerror"),
+    "go-test": ("--- fail:", "--- fail", "error trace:", "not equal"),
+    "mocha": ("failing", "✗", "assertionerror"),
+    "npm": ("failing", "✗", "assertionerror", "not equal"),
 }
 
 RUNNER_ENVIRONMENT_MARKERS: dict[str, tuple[str, ...]] = {
@@ -152,6 +107,9 @@ RUNNER_ENVIRONMENT_MARKERS: dict[str, tuple[str, ...]] = {
         "cannot load",
         "command-line-arguments",
         "no go files",
+        # A panic is a crash, not an assertion that detected the change.
+        "panic:",
+        "runtime error:",
     ),
     "mocha": (
         "cannot find module",
@@ -166,6 +124,17 @@ RUNNER_ENVIRONMENT_MARKERS: dict[str, tuple[str, ...]] = {
         "command not found",
     ),
 }
+
+# A line that explicitly reports zero failures cannot serve as evidence of a
+# failure, even when a broad marker also matches it (e.g. mocha's "0 failing").
+NO_FAILURE_MARKERS: tuple[str, ...] = (
+    "0 failed",
+    "0 failing",
+    "0 errors",
+    "no failures",
+    "all tests passed",
+    "all passed",
+)
 
 
 def markers_for(
@@ -216,7 +185,7 @@ def classify_failure(
 
     for marker in assertion_markers:
         for line in lines:
-            if marker in line:
+            if marker in line and not any(no_failure in line for no_failure in NO_FAILURE_MARKERS):
                 return KIND_ASSERTION, line[:300]
 
     return KIND_UNKNOWN, ""

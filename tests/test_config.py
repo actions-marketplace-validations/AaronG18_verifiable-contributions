@@ -93,11 +93,17 @@ def test_runner_appends_recognised_markers() -> None:
     assert "modulenotfounderror" in config.environment_markers
 
 
-def test_unknown_runner_is_ignored_not_rejected() -> None:
-    # An unknown runner contributes no preset but is kept and does not error.
-    config = Config.load(_policy(["python"], runner=["my-custom-runner"]))
-    assert config.runner == ("my-custom-runner",)
-    # Built-in defaults are still applied.
+def test_unknown_runner_is_rejected_with_a_helpful_message() -> None:
+    # Silently ignoring a typo makes the user think the preset is active.
+    with pytest.raises(ConfigError, match="unknown runner"):
+        Config.load(_policy(["python"], runner=["my-custom-runner"]))
+    with pytest.raises(ConfigError, match="go-test"):
+        Config.load(_policy(["python"], runner=["go_test"]))
+
+
+def test_pytest_runner_name_is_accepted_as_a_no_op() -> None:
+    config = Config.load(_policy(["python"], runner=["pytest"]))
+    assert config.runner == ("pytest",)
     assert "assertionerror" in config.assertion_markers
 
 

@@ -76,11 +76,17 @@ verify:
 command = ["python", "-m", "pytest", "-q"]
 test_paths = ["tests/"]
 timeout_seconds = 300
-protected_paths = ["vrc/", "action.yml", ".vrc.toml", ".github/workflows/receipt.yml", ".github/dependabot.yml", "SECURITY.md", "pyproject.toml"]
+protected_paths = ["vrc/", "action.yml", ".vrc.toml", ".github/workflows/", ".github/dependabot.yml", "SECURITY.md", "pyproject.toml"]
 # Optional: append markers for a test runner whose failure output is not
 # recognised. Built-in markers can never be removed by this list.
 # assertion_markers = ["my-runner: test failed"]
 ```
+
+`test_paths` must point at **test files only**: everything under it is copied
+from the head tree onto the base tree. Listing `src/` or `.` would copy the
+source change too and defeat the check. When tests live beside source files use
+a glob such as `["**/*.test.ts"]` or `["**/*_test.go"]`. See
+[docs/runners.md](docs/runners.md).
 
 The policy is read from the **base commit only**. A contributor cannot weaken
 the command or the test paths in the same PR that is being checked; if they
@@ -93,7 +99,7 @@ touch a protected path, the verdict is `UNTRUSTED`.
   with:
     persist-credentials: false
     fetch-depth: 0
-- uses: AaronG18/verifiable-contributions@v0.2.1
+- uses: AaronG18/verifiable-contributions@v0.3.0
   with:
     base: ${{ github.event.pull_request.base.sha }}
     head: ${{ github.event.pull_request.head.sha }}
