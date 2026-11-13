@@ -210,19 +210,27 @@ def _run(
     *,
     environment_markers: tuple[str, ...],
     assertion_markers: tuple[str, ...],
+    working_directory: str = "",
 ) -> RunRecord:
     start = time.monotonic()
     env = _env_for_run()
-    # The extracted tree must win over anything installed in the runner. Without
-    # this, an editable install of the head checkout would be importable while
-    # replaying the base tree, silently making the base run pass.
+    # A monorepo keeps its package and tests under a subpath (e.g.
+    # `libs/langgraph`). Run there, but keep BOTH the repository root and the
+    # subpackage on PYTHONPATH so the extracted tree wins over an editable
+    # install in the runner (otherwise the base run could silently pass).
+    run_cwd = cwd / working_directory if working_directory else cwd
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = os.pathsep.join([str(cwd), existing] if existing else [str(cwd)])
+    entries = (
+        [str(run_cwd)]
+        + ([str(cwd)] if working_directory else [])
+        + ([existing] if existing else [])
+    )
+    env["PYTHONPATH"] = os.pathsep.join(entries)
     env["VRC_TREE"] = str(cwd)
     try:
         proc = subprocess.run(
             list(command),
-            cwd=cwd,
+            cwd=run_cwd,
             capture_output=True,
             env=env,
             shell=False,
@@ -299,6 +307,18 @@ def replay(
         else sha256_text("")
     )
 
+    # A missing working_directory would otherwise make the command fail to start
+    # (FileNotFoundError -> exit 127) and be reported as NEEDS_RERUN, which
+    # suggests a flaky environment instead of a broken policy. Fail loudly.
+    if config.working_directory:
+        for label, tree in (("base", base_dir), ("head", head_dir)):
+            target = tree / config.working_directory
+            if not target.is_dir():
+                raise ReplayError(
+                    f"working_directory {config.working_directory!r} is not a directory "
+                    f"in the {label} tree; check the policy on the base ref"
+                )
+
     test_files = _overlay_test_paths(base_dir, head_dir, config.test_paths)
     if not test_files:
         raise ReplayError(
@@ -310,6 +330,7 @@ def replay(
     run_kwargs = {
         "environment_markers": config.environment_markers,
         "assertion_markers": config.assertion_markers,
+        "working_directory": config.working_directory,
     }
     base_run = _run(config.command, base_dir, config.timeout_seconds, **run_kwargs)
     head_run = _run(config.command, head_dir, config.timeout_seconds, **run_kwargs)
@@ -328,7 +349,12 @@ def replay(
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "verifier_version": __version__,
+        # A receipt produced locally is a self-check, not an attestation from
+        # maintainer-controlled CI. The report must never imply otherwise.
+        "origin": "ci" if os.environ.get("GITHUB_ACTIONS") == "true" else "local",
     }
+    if config.working_directory:
+        environment["working_directory"] = config.working_directory
     if os.environ.get("GITHUB_RUN_ID"):
         environment["github_run_id"] = os.environ["GITHUB_RUN_ID"]
         environment["github_workflow_sha"] = os.environ.get("GITHUB_SHA", "")

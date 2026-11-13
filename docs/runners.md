@@ -67,7 +67,7 @@ timeout_seconds = 300
   with:
     persist-credentials: false
     fetch-depth: 0
-- uses: AaronG18/verifiable-contributions@v0.3.1
+- uses: AaronG18/verifiable-contributions@v0.5.0
   with:
     base: ${{ github.event.pull_request.base.sha }}
     head: ${{ github.event.pull_request.head.sha }}
@@ -102,6 +102,23 @@ runner = ["mocha"]
 timeout_seconds = 300
 ```
 
+### Monorepo / tests in a subpackage
+
+`working_directory` moves the command into a subdirectory of the extracted
+tree. `test_paths` stay relative to the **repository root**:
+
+```toml
+command = ["python", "-m", "pytest", "tests/test_widget.py", "-q"]
+working_directory = "services/widget"
+test_paths = ["services/widget/tests/"]
+runner = ["pytest"]
+timeout_seconds = 600
+```
+
+The directory must exist in both the base and head trees; otherwise replay
+stops with a configuration error rather than a misleading `NEEDS_RERUN`. Both
+the root and the subpackage are added to `PYTHONPATH`.
+
 ### A custom runner
 
 If your runner isn't listed, append its signature directly; the built-ins stay:
@@ -121,6 +138,19 @@ a contributor cannot grant themselves a new executable in the PR under review.
 
 ## A note on `setup-command`
 
-Non-Python projects install their dependencies in `setup-command` before replay
-(`npm ci`, `go mod download`, etc.). Keep it to dependency installation only —
-the test command itself comes from the policy.
+`setup-command` is an **input of the action's `with:` block**, not a
+`.vrc.toml` key. Non-Python projects install their dependencies there before
+replay (`npm ci`, `go mod download`, etc.). Keep it to dependency installation
+only — the test command itself comes from the policy.
+
+Writing it into `.vrc.toml` is now a hard error rather than being silently
+ignored. Run `vrc validate .vrc.toml --repo .` before opening a PR to catch
+this and other policy mistakes locally: a workflow from a fork will not run
+until a maintainer approves it, so a broken policy would otherwise only be
+discovered after someone else had spent time on the PR.
+
+For projects using PEP 735 dependency-groups (e.g. `uv sync --group test`),
+install the test group in `setup-command`; `pip install -e .[dev]` does not
+read `[dependency-groups]`. Note that `setup-command` runs once in the checkout
+root, before replay, and installs into the runner environment — the two
+replayed trees themselves are never modified.

@@ -81,6 +81,11 @@ def test_workflow_yaml_is_parseable() -> None:
     )
     assert "verify" in verify["jobs"], "the ruleset requires a check literally named verify"
     assert "matrix" not in verify["jobs"]["verify"], "matrix would rename the required check"
+    # A dangling matrix.* expression in a job with no matrix silently resolves
+    # to an empty string, so setup-python would use an arbitrary runner Python.
+    assert "matrix." not in (REPO_ROOT / ".github/workflows/verify.yml").read_text(
+        encoding="utf-8"
+    ), "verify.yml has no matrix; every matrix.* reference is a bug"
     action = yaml.safe_load((REPO_ROOT / "action.yml").read_text(encoding="utf-8"))
     assert len(action["description"]) < 125, "Marketplace rejects descriptions >= 125 chars"
 

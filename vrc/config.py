@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .classification import RUNNER_ASSERTION_MARKERS, markers_for
 
@@ -15,6 +15,24 @@ CONFIG_NAME = ".vrc.toml"
 
 DEFAULT_COMMAND: tuple[str, ...] = ("python", "-m", "pytest", "-q")
 DEFAULT_TEST_PATHS: tuple[str, ...] = ("tests", "test")
+
+# Every key a policy may set. Unknown keys are rejected instead of silently
+# ignored: a misspelled key (or putting an action input such as `setup-command`
+# in the policy) must not make the user think a control is active when it is
+# not. `setup-command` belongs in the workflow's `with:` block, not here.
+KNOWN_POLICY_KEYS: frozenset[str] = frozenset(
+    {
+        "command",
+        "command_allowlist",
+        "test_paths",
+        "protected_paths",
+        "timeout_seconds",
+        "runner",
+        "assertion_markers",
+        "environment_markers",
+        "working_directory",
+    }
+)
 
 # Executables accepted in the test command. The policy is read from the base
 # ref, so a contributor cannot add an executable in the PR being verified.
@@ -71,6 +89,10 @@ class Config:
     runner: tuple[str, ...]
     environment_markers: tuple[str, ...]
     assertion_markers: tuple[str, ...]
+    # Directory (relative to the extracted repository root) the test command
+    # runs in. Needed for monorepos, where the package and its tests live under
+    # a subpath such as `libs/langgraph`. Empty means the repository root.
+    working_directory: str = ""
 
     @classmethod
     def default(cls) -> Config:
@@ -97,6 +119,41 @@ class Config:
             data = tomllib.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"invalid {CONFIG_NAME}: {exc}") from exc
+
+        unknown = sorted(set(data) - KNOWN_POLICY_KEYS)
+        if unknown:
+            hint = ""
+            if "setup-command" in unknown:
+                hint = (
+                    " `setup-command` is an input of the action's `with:` block in the "
+                    "workflow, not a policy key; install dependencies there (or locally "
+                    "before running `vrc replay`)."
+                )
+            raise ConfigError(
+                f"unknown policy key(s) {unknown!r}; valid keys are "
+                f"{sorted(KNOWN_POLICY_KEYS)}.{hint}"
+            )
+
+        workdir = data.get("working_directory", "")
+        if not isinstance(workdir, str):
+            raise ConfigError("working_directory must be a string")
+        # Check the RAW string: PurePosixPath silently normalises "a//b" and
+        # "a/./b", which would let an ambiguous path through. A single trailing
+        # slash is harmless, so strip exactly that before splitting.
+        normalized = workdir[:-1] if workdir.endswith("/") else workdir
+        if normalized:
+            parts = normalized.split("/")
+            if (
+                PurePosixPath(normalized).is_absolute()
+                or normalized.startswith("/")
+                or "\\" in normalized
+                or any(part in ("", ".", "..") for part in parts)
+            ):
+                raise ConfigError(
+                    "working_directory must be a safe relative path inside the "
+                    "repository (no '..', '.', absolute paths, backslashes or empty segments)"
+                )
+        workdir = workdir.strip("/")
 
         command = data.get("command", list(DEFAULT_COMMAND))
         if (
@@ -186,4 +243,5 @@ class Config:
             runner=runners,
             environment_markers=environment_markers,
             assertion_markers=assertion_markers,
+            working_directory=workdir,
         )
